@@ -39,7 +39,7 @@ def main(start_url, follow_length):
                 for i in range(0, follow_length + 1):
                     page.wait_for_load_state("domcontentloaded")
                     page.wait_for_timeout(1000)
-                    screenshot_path = output_path / "screenshots" / "screenshot-{i:05d}.png"
+                    screenshot_path = output_path / "screenshots" / f"screenshot-{i:05d}.png"
                     page.screenshot(path=screenshot_path)
                     check_sponsors(screenshot_path)
                     get_metadata(page, i, output_path)
@@ -81,7 +81,7 @@ def get_metadata(page, i, output_path):
             thumbnailUrl = data["thumbnailUrl"][0]
             description = data["description"]
 
-            print(f"{i:04d}: {shorten(title, width=50, placeholder='...'):<50} - {shorten(channel, width=40, placeholder='...'):<40} / {genre} / {views}|{likes}")
+            print(f"{i:04d}: {shorten(title, width=50, placeholder='...'):<50} - {shorten(channel, width=30, placeholder='...'):<40} / {genre} / {views}|{likes}")
             csv.write(f'{i},{vid_id},"{title}","{channel}",{views},{likes},{genre},{thumbnailUrl}\n')
 
             with open(output_path / "descriptions" / f"{i:05d}-{vid_id}.txt", "x") as desc_file:
@@ -101,13 +101,13 @@ def get_youtube_id(video_url):
 
 def check_sponsors(path):
     im = Image.open(path)
-    if "sponsored" in pytesseract.image_to_string(im).lower():
+    if any(word in pytesseract.image_to_string(im).lower() for word in ["sponsored", "shop"]):
         d = pytesseract.image_to_data(im, output_type="dict")
         draw = ImageDraw.Draw(im)
         for i in range(len(d["text"])):
             if d["conf"][i] > 50 and "sponsored" in d["text"][i].lower():
                 (x, y, w, h) = (d["left"][i], d["top"][i], d["width"][i], d["height"][i])
-                draw.rectangle(((x - 2, y - 2), (x + w + 2, y + h + 2)), outline="green")
+                draw.rectangle(((x - 2, y - 2), (x + w + 2, y + h + 2)), outline="ff00e6")
         im.save(path.parent.parent / "annotated_screenshots" / path.name)
 
 
