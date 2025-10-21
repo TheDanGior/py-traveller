@@ -39,7 +39,9 @@ def main(start_url, follow_length):
                 for i in range(0, follow_length + 1):
                     page.wait_for_load_state("domcontentloaded")
                     page.wait_for_timeout(1000)
-                    screenshot_path = output_path / "screenshots" / f"screenshot-{i:05d}.png"
+                    screenshot_path = (
+                        output_path / "screenshots" / f"screenshot-{i:05d}.png"
+                    )
                     page.screenshot(path=screenshot_path)
                     check_sponsors(screenshot_path)
                     get_metadata(page, i, output_path)
@@ -59,37 +61,48 @@ def get_metadata(page, i, output_path):
     with open(output_path / "data.csv", "a") as csv:
         vid_id = get_youtube_id(page.url)
         if i == 0:
-            csv.write("number,id,title,channel,views,likes,genre,thumbnail_url\n")
+            csv.write("number,id,title,channel,views,likes,genre,keywords,thumbnail_url\n")
 
         try:
-            raw_data = page.locator("css=.playerMicroformatRendererHost > script")
+            raw_data = page.locator(".playerMicroformatRendererHost")
             data = json.loads(raw_data.inner_text())
 
             views = [
                 a["userInteractionCount"]
                 for a in data["interactionStatistic"]
                 if "WatchAction" in a["interactionType"]
-            ][0]
+            ]
+            views = views[0] if len(views) > 0 else -1
+
             likes = [
                 a["userInteractionCount"]
                 for a in data["interactionStatistic"]
                 if "LikeAction" in a["interactionType"]
-            ][0]
+            ]
+            likes = likes[0] if len(likes) > 0 else -1
             title = data["name"]
             channel = data["author"]
             genre = data["genre"]
             thumbnailUrl = data["thumbnailUrl"][0]
             description = data["description"]
+            keywords = page.locator('meta[name="keywords"]').get_attribute("content")
 
-            print(f"{i:04d}: {shorten(title, width=50, placeholder='...'):<50} - {shorten(channel, width=30, placeholder='...'):<40} / {genre} / {views}|{likes}")
-            csv.write(f'{i},{vid_id},"{title}","{channel}",{views},{likes},{genre},{thumbnailUrl}\n')
+            print(
+                f"{i:04d}: {shorten(title, width=50, placeholder='...'):<50} - {shorten(channel, width=30, placeholder='...'):<30} / {genre} / {views}|{likes}"
+            )
+            csv.write(
+                f'{i},{vid_id},"{title}","{channel}",{views},{likes},{genre},"{keywords}",{thumbnailUrl}\n'
+            )
 
-            with open(output_path / "descriptions" / f"{i:05d}-{vid_id}.txt", "x") as desc_file:
+            with open(
+                output_path / "descriptions" / f"{i:05d}-{vid_id}.txt", "x"
+            ) as desc_file:
                 desc_file.write(description)
 
         except Exception as e:
             print(f"{i:04d}: ERROR - {str(e)[0:100]}")
             csv.write(f"{i},{vid_id},Unable to get data\n")
+            print(traceback.format_exc())
 
 
 def get_youtube_id(video_url):
@@ -101,19 +114,37 @@ def get_youtube_id(video_url):
 
 def check_sponsors(path):
     im = Image.open(path)
-    if any(word in pytesseract.image_to_string(im).lower() for word in ["sponsored", "shop"]):
+    if any(
+        word in pytesseract.image_to_string(im).lower()
+        for word in ["sponsored", "shop"]
+    ):
         d = pytesseract.image_to_data(im, output_type="dict")
         draw = ImageDraw.Draw(im)
         for i in range(len(d["text"])):
             if d["conf"][i] > 50 and "sponsored" in d["text"][i].lower():
-                (x, y, w, h) = (d["left"][i], d["top"][i], d["width"][i], d["height"][i])
-                draw.rectangle(((x - 2, y - 2), (x + w + 2, y + h + 2)), outline="ff00e6")
+                (x, y, w, h) = (
+                    d["left"][i],
+                    d["top"][i],
+                    d["width"][i],
+                    d["height"][i],
+                )
+                draw.rectangle(
+                    ((x - 2, y - 2), (x + w + 2, y + h + 2)), outline="#ff00e6"
+                )
         im.save(path.parent.parent / "annotated_screenshots" / path.name)
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description='Follow the trail of youtube recommendations')
-    parser.add_argument('start_url', help='The youtube url to start on')
-    parser.add_argument('--max-follow','-f', help='The maximum number of URLs to follow (default 1000)', default=1000, type=int)
+    parser = argparse.ArgumentParser(
+        description="Follow the trail of youtube recommendations"
+    )
+    parser.add_argument("start_url", help="The youtube url to start on")
+    parser.add_argument(
+        "--max-follow",
+        "-f",
+        help="The maximum number of URLs to follow (default 1000)",
+        default=1000,
+        type=int,
+    )
     args = vars(parser.parse_args())
-    main(args['start_url'], args['max_follow'])
+    main(args["start_url"], args["max_follow"])
